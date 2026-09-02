@@ -117,7 +117,23 @@ alembic revision --autogenerate -m "init"
 alembic upgrade head
 ```
 
-### 6. Run the API
+### 6. Load demo data (recommended for a quick try)
+
+```bash
+python -m src.seed
+```
+
+This creates a **pre-verified demo user** plus sample products, customers, and
+sales, so you can call every endpoint immediately:
+
+```
+email:    demo@example.com
+password: demo123456
+```
+
+(Run `python -m src.seed --reset` to wipe and rebuild the sample data.)
+
+### 7. Run the API
 
 ```bash
 uvicorn src:app --reload
@@ -125,7 +141,7 @@ uvicorn src:app --reload
 
 Open the interactive docs at **http://localhost:8000/api/v1/docs**.
 
-### 7. (Optional) Run the Celery worker for emails
+### 8. (Optional) Run the Celery worker for emails
 
 ```bash
 celery -A src.celery.celery_app worker --loglevel=info
@@ -134,6 +150,9 @@ celery -A src.celery.celery_app flower
 ```
 
 ## 🔑 Typical flow
+
+If you ran the seeder (step 6), skip straight to logging in as
+`demo@example.com` / `demo123456`. Otherwise:
 
 1. `POST /api/v1/auth/signup` — create an account (a verification email is queued)
 2. `GET /api/v1/auth/verify/{token}` — verify (link from the email)
