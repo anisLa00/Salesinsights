@@ -1,0 +1,10 @@
+Async Alembic migrations for Sales Insight.
+
+Generate the first migration once your database is running and .env is set:
+
+    alembic revision --autogenerate -m "init"
+    alembic upgrade head
+
+The database URL is read from src.config (DATABASE_URL) in env.py, and the
+target metadata is SQLModel.metadata, so autogenerate sees every model in
+src/db/models.py.

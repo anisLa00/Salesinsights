@@ -1,0 +1,31 @@
+# Local infrastructure: PostgreSQL + Redis.
+#   docker compose up -d
+# Credentials match the defaults in .env.example.
+services:
+  db:
+    image: postgres:16
+    container_name: sales_insight_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: sales
+      POSTGRES_PASSWORD: sales
+      POSTGRES_DB: sales_insight
+    ports:
+      - "5432:5432"
+    volumes:
+      - sales_insight_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sales -d sales_insight"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7
+    container_name: sales_insight_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+
+volumes:
+  sales_insight_pgdata:
