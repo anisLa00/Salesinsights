@@ -6,8 +6,7 @@ business analysis — powered by **Claude**.
 
 Built with **Python + FastAPI** and **PostgreSQL**, with JWT authentication,
 email verification, Redis/Celery background processing, database migrations,
-and automated API tests. Same stack as [BOOKY](https://github.com/anisLa00/BOOKY),
-plus AI insights.
+and automated API tests. 
 
 ## ✨ Features
 
