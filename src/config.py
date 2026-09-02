@@ -5,6 +5,9 @@ The module also exposes the lowercase names Celery expects
 `celery_app.config_from_object("src.config")` can read them directly.
 """
 
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -39,6 +42,32 @@ class Settings(BaseSettings):
     ANTHROPIC_MODEL: str = "claude-opus-5"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    @field_validator("DATABASE_URL")
+    @classmethod
+    def _use_asyncpg_driver(cls, value: str) -> str:
+        """Normalize a plain Postgres URL to the async (asyncpg) form.
+
+        Managed hosts like Render/Heroku hand out `postgres://` or
+        `postgresql://` URLs; this app needs `postgresql+asyncpg://`. We also
+        drop libpq-only query params (e.g. `sslmode`) that asyncpg rejects.
+        """
+        if value.startswith("postgres://"):
+            value = "postgresql+asyncpg://" + value[len("postgres://") :]
+        elif value.startswith("postgresql://"):
+            value = "postgresql+asyncpg://" + value[len("postgresql://") :]
+
+        parts = urlsplit(value)
+        if parts.query:
+            kept = [
+                (k, v)
+                for k, v in parse_qsl(parts.query)
+                if k not in {"sslmode", "channel_binding"}
+            ]
+            value = urlunsplit(
+                (parts.scheme, parts.netloc, parts.path, urlencode(kept), parts.fragment)
+            )
+        return value
 
     @property
     def ai_enabled(self) -> bool:

@@ -182,6 +182,32 @@ pytest
 The default suite runs without a live database or Redis (it checks routing,
 validation, and auth enforcement).
 
+## ☁️ Deploy to Render
+
+This repo includes a `render.yaml` **Blueprint** that provisions everything
+(web service + PostgreSQL + Redis) in one step:
+
+1. Push this repo to GitHub (already done).
+2. Go to the [Render dashboard](https://dashboard.render.com/) →
+   **New → Blueprint**.
+3. Connect this repository. Render reads `render.yaml` and creates the API,
+   a PostgreSQL database, and a Redis instance, wiring the env vars together.
+4. Click **Apply** and wait for the first deploy.
+5. (Optional) In the web service's **Environment** tab, set
+   `ANTHROPIC_API_KEY` to enable real Claude analysis.
+
+On first boot the app seeds the demo data, so the live docs are ready at:
+
+```
+https://<your-service>.onrender.com/api/v1/docs
+```
+
+Log in with `demo@example.com` / `demo123456` and try
+`GET /api/v1/insights/analyze`.
+
+> Note: Render's free tier spins the service down after inactivity, so the
+> first request after a pause can take ~30–60s to wake up.
+
 ## 📄 License
 
 MIT — see [LICENSE](LICENSE).
