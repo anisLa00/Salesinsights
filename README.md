@@ -70,7 +70,28 @@ sales-insight/
 └── README.md
 ```
 
-## 🚀 Getting Started (step by step)
+## 🚀 Getting Started
+
+### ⚡ Fastest: one command with Docker
+
+If you have Docker, this runs the whole stack (API + PostgreSQL + Redis) and
+seeds demo data automatically:
+
+```bash
+git clone https://github.com/anisLa00/Salesinsights.git
+cd Salesinsights
+docker compose up --build
+```
+
+Then open **http://localhost:8000/api/v1/docs** and log in with
+`demo@example.com` / `demo123456`.
+
+To enable real Claude analysis, add your key in `docker-compose.yml` (the
+commented `ANTHROPIC_API_KEY` line) before starting.
+
+---
+
+### 🐍 Manual setup (step by step)
 
 ### 1. Clone and enter the project
 
@@ -172,6 +193,30 @@ them to Claude with an analyst system prompt. The model returns a JSON report
 (summary, key findings, recommendations). If no `ANTHROPIC_API_KEY` is set, a
 deterministic heuristic produces the same shape of report so the endpoint
 always works. The response's `source` field is `"ai"` or `"heuristic"`.
+
+### Example `GET /api/v1/insights/analyze` response
+
+```json
+{
+  "summary": "Across 80 orders the business generated $28,915.00 in revenue (235 units, $361.44 average order value).",
+  "key_findings": [
+    {"title": "Best-selling product", "detail": "'27\" Monitor' leads with $14,400.00 (50% of total revenue)."},
+    {"title": "Leading category", "detail": "'Displays' is the top category at $14,400.00."},
+    {"title": "Strongest region", "detail": "'APAC' contributes the most revenue ($15,930.00)."},
+    {"title": "Revenue trend", "detail": "Monthly revenue moved up from $4,295.00 (2026-03) to $4,685.00 (2026-08)."}
+  ],
+  "recommendations": [
+    "Revenue is concentrated in '27\" Monitor'. Diversify the catalog to reduce dependence on a single product.",
+    "'EMEA' is the weakest region ($6,175.00). Consider targeted campaigns there.",
+    "Focus retention on top customers — they drive a large share of revenue."
+  ],
+  "source": "heuristic",
+  "metrics": { "...": "the aggregated numbers the analysis was based on" }
+}
+```
+
+(This is the seeded-demo output. With `ANTHROPIC_API_KEY` set, `source` is
+`"ai"` and the narrative is written by Claude from the same metrics.)
 
 ## 🧪 Running tests
 

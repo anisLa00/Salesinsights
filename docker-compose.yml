@@ -1,7 +1,32 @@
-# Local infrastructure: PostgreSQL + Redis.
-#   docker compose up -d
+# Local stack: API + PostgreSQL + Redis.
+#
+#   docker compose up --build        # run the whole app (API on :8000)
+#   docker compose up -d db redis    # or just the infrastructure, and run
+#                                    # `uvicorn src:app --reload` yourself
+#
 # Credentials match the defaults in .env.example.
 services:
+  api:
+    build: .
+    container_name: sales_insight_api
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+asyncpg://sales:sales@db:5432/sales_insight
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET: local-dev-secret-change-me
+      DOMAIN: localhost:8000
+      # Add your key here (or in a .env file) to enable real Claude analysis:
+      # ANTHROPIC_API_KEY: sk-ant-...
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # Seed demo data on first boot (idempotent), then start the API.
+    command: sh -c "python -m src.seed || echo 'seed skipped'; uvicorn src:app --host 0.0.0.0 --port 8000"
+
   db:
     image: postgres:16
     container_name: sales_insight_db
@@ -26,6 +51,11 @@ services:
     restart: unless-stopped
     ports:
       - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
 volumes:
   sales_insight_pgdata:
