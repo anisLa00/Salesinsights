@@ -67,6 +67,39 @@ class SaleNotFound(SalesInsightException):
     """No sale matched the given id."""
 
 
+# --- Business / tenancy ---
+class BusinessNotFound(SalesInsightException):
+    """No business matched the given id."""
+
+
+class NotBusinessMember(SalesInsightException):
+    """The user is not an active member of this business."""
+
+
+class NoBusinessContext(SalesInsightException):
+    """The user does not belong to any business yet."""
+
+
+class MemberNotFound(SalesInsightException):
+    """No member matched the given id in this business."""
+
+
+class AlreadyBusinessMember(SalesInsightException):
+    """The user already belongs to this business."""
+
+
+class CannotModifyOwner(SalesInsightException):
+    """Only the owner may change or remove the owner membership."""
+
+
+class InvitationNotFound(SalesInsightException):
+    """No invitation matched the given token or id."""
+
+
+class InvitationInvalid(SalesInsightException):
+    """The invitation token is invalid, expired, or already used."""
+
+
 def create_exception_handler(
     status_code: int, initial_detail: Any
 ) -> Callable[[Request, Exception], JSONResponse]:
@@ -149,6 +182,55 @@ def register_all_errors(app: FastAPI) -> None:
         SaleNotFound: (
             status.HTTP_404_NOT_FOUND,
             {"message": "Sale not found", "error_code": "sale_not_found"},
+        ),
+        BusinessNotFound: (
+            status.HTTP_404_NOT_FOUND,
+            {"message": "Business not found", "error_code": "business_not_found"},
+        ),
+        NotBusinessMember: (
+            status.HTTP_403_FORBIDDEN,
+            {
+                "message": "You are not an active member of this business",
+                "error_code": "not_business_member",
+            },
+        ),
+        NoBusinessContext: (
+            status.HTTP_404_NOT_FOUND,
+            {
+                "message": "You do not belong to any business yet",
+                "resolution": "Create a business via POST /api/v1/businesses/ "
+                "or accept an invitation.",
+                "error_code": "no_business_context",
+            },
+        ),
+        MemberNotFound: (
+            status.HTTP_404_NOT_FOUND,
+            {"message": "Member not found", "error_code": "member_not_found"},
+        ),
+        AlreadyBusinessMember: (
+            status.HTTP_409_CONFLICT,
+            {
+                "message": "This user is already a member of the business",
+                "error_code": "already_business_member",
+            },
+        ),
+        CannotModifyOwner: (
+            status.HTTP_403_FORBIDDEN,
+            {
+                "message": "The business owner cannot be modified or removed",
+                "error_code": "cannot_modify_owner",
+            },
+        ),
+        InvitationNotFound: (
+            status.HTTP_404_NOT_FOUND,
+            {"message": "Invitation not found", "error_code": "invitation_not_found"},
+        ),
+        InvitationInvalid: (
+            status.HTTP_400_BAD_REQUEST,
+            {
+                "message": "Invitation is invalid, expired, or already used",
+                "error_code": "invitation_invalid",
+            },
         ),
     }
 

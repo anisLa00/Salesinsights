@@ -1,14 +1,35 @@
-"""Compute aggregated sales metrics from the database (async)."""
+"""Compute aggregated sales metrics for a single business (async).
 
+Every statement here filters on ``Sale.business_uid`` (and joins only rows of
+the same business), so analytics can never blend two tenants' data. The month
+bucketing is done in Python to stay database-agnostic.
+"""
+
+import uuid
 from collections import defaultdict
 
 from sqlalchemy import func
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from src.db.models import Customer, Product, Sale
+from src.db.models import (
+    Business,
+    BusinessMember,
+    Customer,
+    Product,
+    Sale,
+    User,
+)
 
-from .schemas import SalesMetrics, TopItem
+from .schemas import (
+    DashboardBusiness,
+    DashboardMetrics,
+    DashboardModel,
+    EmployeeStat,
+    MonthlyRevenuePoint,
+    SalesMetrics,
+    TopItem,
+)
 
 TOP_N = 5
 
@@ -26,7 +47,9 @@ def _top_items(rows) -> list[TopItem]:
 
 
 class InsightService:
-    async def compute_metrics(self, session: AsyncSession) -> SalesMetrics:
+    async def compute_metrics(
+        self, business_uid: uuid.UUID, session: AsyncSession
+    ) -> SalesMetrics:
         # --- Headline totals ---
         totals = (
             await session.exec(
@@ -34,7 +57,7 @@ class InsightService:
                     func.coalesce(func.sum(Sale.total_amount), 0),
                     func.count(Sale.uid),
                     func.coalesce(func.sum(Sale.quantity), 0),
-                )
+                ).where(Sale.business_uid == business_uid)
             )
         ).one()
         total_revenue = _f(totals[0])
@@ -52,6 +75,7 @@ class InsightService:
                         func.sum(Sale.quantity),
                     )
                     .join(Sale, Sale.product_uid == Product.uid)
+                    .where(Sale.business_uid == business_uid)
                     .group_by(Product.name)
                     .order_by(func.sum(Sale.total_amount).desc())
                     .limit(TOP_N)
@@ -69,6 +93,7 @@ class InsightService:
                         func.sum(Sale.quantity),
                     )
                     .join(Sale, Sale.product_uid == Product.uid)
+                    .where(Sale.business_uid == business_uid)
                     .group_by(Product.category)
                     .order_by(func.sum(Sale.total_amount).desc())
                     .limit(TOP_N)
@@ -86,6 +111,7 @@ class InsightService:
                         func.sum(Sale.quantity),
                     )
                     .join(Sale, Sale.customer_uid == Customer.uid)
+                    .where(Sale.business_uid == business_uid)
                     .group_by(Customer.region)
                     .order_by(func.sum(Sale.total_amount).desc())
                     .limit(TOP_N)
@@ -103,6 +129,7 @@ class InsightService:
                         func.sum(Sale.quantity),
                     )
                     .join(Sale, Sale.customer_uid == Customer.uid)
+                    .where(Sale.business_uid == business_uid)
                     .group_by(Customer.name)
                     .order_by(func.sum(Sale.total_amount).desc())
                     .limit(TOP_N)
@@ -110,9 +137,42 @@ class InsightService:
             ).all()
         )
 
+        # --- Per-employee operational metrics ---
+        sales_by_employee = [
+            EmployeeStat(
+                user_uid=user_uid,
+                name=f"{first or ''} {last or ''}".strip() or (email or "Unknown"),
+                email=email,
+                sales_count=int(count or 0),
+                revenue=_f(revenue),
+            )
+            for user_uid, first, last, email, revenue, count in (
+                await session.exec(
+                    select(
+                        User.uid,
+                        User.first_name,
+                        User.last_name,
+                        User.email,
+                        func.sum(Sale.total_amount),
+                        func.count(Sale.uid),
+                    )
+                    .join(Sale, Sale.user_uid == User.uid)
+                    .where(Sale.business_uid == business_uid)
+                    .group_by(User.uid, User.first_name, User.last_name, User.email)
+                    .order_by(func.sum(Sale.total_amount).desc())
+                )
+            ).all()
+        ]
+
         # --- Revenue by month (bucketed in Python for DB portability) ---
         monthly: dict[str, float] = defaultdict(float)
-        rows = (await session.exec(select(Sale.sold_at, Sale.total_amount))).all()
+        rows = (
+            await session.exec(
+                select(Sale.sold_at, Sale.total_amount).where(
+                    Sale.business_uid == business_uid
+                )
+            )
+        ).all()
         for sold_at, amount in rows:
             if sold_at is None:
                 continue
@@ -129,4 +189,53 @@ class InsightService:
             revenue_by_region=revenue_by_region,
             top_customers=top_customers,
             revenue_by_month=revenue_by_month,
+            sales_by_employee=sales_by_employee,
+        )
+
+    async def build_dashboard(
+        self, business: Business, session: AsyncSession
+    ) -> DashboardModel:
+        """Headline counts plus the highlights, for one business."""
+        business_uid = business.uid
+        metrics = await self.compute_metrics(business_uid, session)
+
+        product_count = (
+            await session.exec(
+                select(func.count(Product.uid)).where(
+                    Product.business_uid == business_uid
+                )
+            )
+        ).one()
+        customer_count = (
+            await session.exec(
+                select(func.count(Customer.uid)).where(
+                    Customer.business_uid == business_uid
+                )
+            )
+        ).one()
+        employee_count = (
+            await session.exec(
+                select(func.count(BusinessMember.uid)).where(
+                    BusinessMember.business_uid == business_uid,
+                    BusinessMember.is_active == True,  # noqa: E712
+                )
+            )
+        ).one()
+
+        return DashboardModel(
+            business=DashboardBusiness(uid=business.uid, name=business.name),
+            metrics=DashboardMetrics(
+                total_revenue=metrics.total_revenue,
+                total_sales=metrics.total_orders,
+                products=int(product_count or 0),
+                customers=int(customer_count or 0),
+                employees=int(employee_count or 0),
+            ),
+            top_products=metrics.top_products,
+            top_customers=metrics.top_customers,
+            employee_sales=metrics.sales_by_employee,
+            monthly_revenue=[
+                MonthlyRevenuePoint(month=month, revenue=revenue)
+                for month, revenue in metrics.revenue_by_month.items()
+            ],
         )

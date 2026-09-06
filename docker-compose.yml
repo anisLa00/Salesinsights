@@ -1,22 +1,23 @@
-# Local stack: API + PostgreSQL + Redis.
+# Local stack: API + Celery worker + PostgreSQL + Redis.
 #
-#   docker compose up --build        # run the whole app (API on :8000)
+#   docker compose up --build        # run everything (API on :8000)
 #   docker compose up -d db redis    # or just the infrastructure, and run
 #                                    # `uvicorn src:app --reload` yourself
 #
-# Credentials match the defaults in .env.example.
+# Credentials match the defaults in .env.example. Secrets (JWT_SECRET, mail
+# password, ANTHROPIC_API_KEY) come from a local `.env`, which is gitignored.
 services:
   api:
     build: .
     container_name: sales_insight_api
     restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
     environment:
       DATABASE_URL: postgresql+asyncpg://sales:sales@db:5432/sales_insight
       REDIS_URL: redis://redis:6379/0
-      JWT_SECRET: local-dev-secret-change-me
       DOMAIN: localhost:8000
-      # Add your key here (or in a .env file) to enable real Claude analysis:
-      # ANTHROPIC_API_KEY: sk-ant-...
     ports:
       - "8000:8000"
     depends_on:
@@ -24,8 +25,30 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    # Seed demo data on first boot (idempotent), then start the API.
-    command: sh -c "python -m src.seed || echo 'seed skipped'; uvicorn src:app --host 0.0.0.0 --port 8000"
+    # Migrate first (Alembic owns the schema), then seed demo data, then serve.
+    command: >
+      sh -c "alembic upgrade head &&
+             (python -m src.seed || echo 'seed skipped') &&
+             uvicorn src:app --host 0.0.0.0 --port 8000"
+
+  worker:
+    build: .
+    container_name: sales_insight_worker
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgresql+asyncpg://sales:sales@db:5432/sales_insight
+      REDIS_URL: redis://redis:6379/0
+      DOMAIN: localhost:8000
+    depends_on:
+      redis:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+    # Sends invitation / verification / password-reset emails off the request path.
+    command: celery -A src.celery.celery_app worker --loglevel=info
 
   db:
     image: postgres:16

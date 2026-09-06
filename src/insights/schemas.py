@@ -1,4 +1,6 @@
-"""Schemas for aggregated metrics and AI-generated insight reports."""
+"""Schemas for aggregated metrics, AI insight reports, and the dashboard."""
+
+import uuid
 
 from pydantic import BaseModel, Field
 
@@ -11,11 +13,21 @@ class TopItem(BaseModel):
     units: int
 
 
+class EmployeeStat(BaseModel):
+    """Operational metrics for one employee who recorded sales."""
+
+    user_uid: uuid.UUID | None = None
+    name: str
+    email: str | None = None
+    sales_count: int
+    revenue: float
+
+
 class SalesMetrics(BaseModel):
-    """Aggregated numbers computed from the sales table.
+    """Aggregated numbers computed from one business's sales.
 
     Returned by `/insights/metrics` and fed to the AI model as the factual
-    basis for its analysis.
+    basis for its analysis. Always scoped to a single business.
     """
 
     total_revenue: float = 0.0
@@ -27,6 +39,7 @@ class SalesMetrics(BaseModel):
     revenue_by_region: list[TopItem] = Field(default_factory=list)
     top_customers: list[TopItem] = Field(default_factory=list)
     revenue_by_month: dict[str, float] = Field(default_factory=dict)
+    sales_by_employee: list[EmployeeStat] = Field(default_factory=list)
 
 
 class Insight(BaseModel):
@@ -47,3 +60,31 @@ class InsightReport(BaseModel):
         "built-in fallback was used (no API key configured)."
     )
     metrics: SalesMetrics
+
+
+# --- Dashboard -----------------------------------------------------------
+class DashboardBusiness(BaseModel):
+    uid: uuid.UUID
+    name: str
+
+
+class DashboardMetrics(BaseModel):
+    total_revenue: float = 0.0
+    total_sales: int = 0
+    products: int = 0
+    customers: int = 0
+    employees: int = 0
+
+
+class MonthlyRevenuePoint(BaseModel):
+    month: str
+    revenue: float
+
+
+class DashboardModel(BaseModel):
+    business: DashboardBusiness
+    metrics: DashboardMetrics
+    top_products: list[TopItem] = Field(default_factory=list)
+    top_customers: list[TopItem] = Field(default_factory=list)
+    employee_sales: list[EmployeeStat] = Field(default_factory=list)
+    monthly_revenue: list[MonthlyRevenuePoint] = Field(default_factory=list)

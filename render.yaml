@@ -8,8 +8,9 @@ services:
     plan: free
     region: oregon
     buildCommand: pip install -r requirements.txt
-    # Seed demo data on first boot (idempotent), then start the API.
-    startCommand: python -m src.seed || echo "seed skipped"; uvicorn src:app --host 0.0.0.0 --port $PORT
+    # Apply migrations (Alembic owns the schema), seed demo data on first
+    # boot (idempotent), then start the API.
+    startCommand: alembic upgrade head && (python -m src.seed || echo "seed skipped") && uvicorn src:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: PYTHON_VERSION
         value: "3.11.9"

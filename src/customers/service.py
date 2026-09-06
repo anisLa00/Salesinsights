@@ -1,4 +1,10 @@
-"""Database operations for customers."""
+"""Database operations for customers.
+
+Every query is scoped by ``business_uid`` so a customer id from another tenant
+never resolves.
+"""
+
+import uuid
 
 from sqlmodel import desc, select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -9,22 +15,36 @@ from .schemas import CustomerCreateModel, CustomerUpdateModel
 
 
 class CustomerService:
-    async def get_all_customers(self, session: AsyncSession) -> list[Customer]:
-        statement = select(Customer).order_by(desc(Customer.created_at))
+    async def get_all_customers(
+        self, business_uid: uuid.UUID, session: AsyncSession
+    ) -> list[Customer]:
+        statement = (
+            select(Customer)
+            .where(Customer.business_uid == business_uid)
+            .order_by(desc(Customer.created_at))
+        )
         result = await session.exec(statement)
         return result.all()
 
     async def get_customer(
-        self, customer_uid: str, session: AsyncSession
+        self, business_uid: uuid.UUID, customer_uid: uuid.UUID, session: AsyncSession
     ) -> Customer | None:
-        statement = select(Customer).where(Customer.uid == customer_uid)
+        statement = select(Customer).where(
+            Customer.uid == customer_uid,
+            Customer.business_uid == business_uid,
+        )
         result = await session.exec(statement)
         return result.first()
 
     async def create_customer(
-        self, customer_data: CustomerCreateModel, session: AsyncSession
+        self,
+        business_uid: uuid.UUID,
+        customer_data: CustomerCreateModel,
+        session: AsyncSession,
     ) -> Customer:
-        new_customer = Customer(**customer_data.model_dump())
+        new_customer = Customer(
+            **customer_data.model_dump(), business_uid=business_uid
+        )
         session.add(new_customer)
         await session.commit()
         await session.refresh(new_customer)
@@ -32,11 +52,12 @@ class CustomerService:
 
     async def update_customer(
         self,
-        customer_uid: str,
+        business_uid: uuid.UUID,
+        customer_uid: uuid.UUID,
         update_data: CustomerUpdateModel,
         session: AsyncSession,
     ) -> Customer | None:
-        customer = await self.get_customer(customer_uid, session)
+        customer = await self.get_customer(business_uid, customer_uid, session)
         if customer is None:
             return None
         for key, value in update_data.model_dump(exclude_unset=True).items():
@@ -46,9 +67,9 @@ class CustomerService:
         return customer
 
     async def delete_customer(
-        self, customer_uid: str, session: AsyncSession
+        self, business_uid: uuid.UUID, customer_uid: uuid.UUID, session: AsyncSession
     ) -> bool:
-        customer = await self.get_customer(customer_uid, session)
+        customer = await self.get_customer(business_uid, customer_uid, session)
         if customer is None:
             return False
         await session.delete(customer)
