@@ -2,7 +2,7 @@
 
 A **multi-tenant, AI-powered sales analytics REST API**. Each business runs its
 own team, catalog, customers and sales; the API aggregates that data and turns
-it into a plain-language business analysis — powered by **Claude**.
+it into a plain-language business analysis.
 
 Built with **Python + FastAPI** and **PostgreSQL**, with JWT authentication,
 email verification, Redis/Celery background processing, database migrations,
